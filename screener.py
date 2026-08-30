@@ -24,9 +24,10 @@ def calc_rsi(closes, period=14):
     rs = (gains / period) / (losses / period)
     return 100 - (100 / (1 + rs))
 
-print("Loading tickers from CSV...")
-raw_df = pd.read_csv('ticker.csv', header=None)
-tickers = [f"{str(t).strip()}.NS" for t in raw_df[0].tolist()]
+print("Loading tickers and company names from CSV...")
+# Reads your uploaded 2-column file
+master_df = pd.read_csv('ticker.csv') 
+tickers = [f"{str(t).strip()}.NS" for t in master_df['Ticker'].tolist()]
 
 print("Fetching Nifty 50 Benchmark...")
 nifty = yf.download("^NSEI", period="1y", interval="1d", progress=False)['Close']
@@ -92,19 +93,9 @@ for ticker in tickers:
         else:
             beta, alpha = 1, 0
 
-        # Fetch Company Info (Takes roughly 0.5 to 1 second per ticker)
-        ticker_obj = yf.Ticker(ticker)
-        info = ticker_obj.info
-        company_name = info.get('longName', 'N/A')
-        sector = info.get('sector', 'N/A')
-        market_cap_cr = info.get('marketCap', 0) / 10000000 if info.get('marketCap') else 0
-
-        # Exact output order requested
+        # Math logic only - no Yahoo Finance text lookups
         results.append({
             "Ticker": ticker.replace('.NS', ''),
-            "Company Name": company_name,
-            "Sector": sector,
-            "Market Cap (Cr)": round(market_cap_cr, 2),
             "Weighted Sharpe": round(w_sharpe, 2),
             "Weighted Sortino": round(w_sortino, 2),
             "1-Year ROC %": round(roc_12m, 2),
@@ -125,6 +116,15 @@ for ticker in tickers:
     except Exception as e:
         continue
 
-output_df = pd.DataFrame(results)
-output_df.to_csv('screener_results.csv', index=False)
-print("Screener completed!")
+# 3. Merge the math with your Company Names
+calc_df = pd.DataFrame(results)
+final_df = pd.merge(master_df, calc_df, on="Ticker", how="inner")
+
+# Reorder so Company Name is right next to Ticker
+cols = final_df.columns.tolist()
+cols.insert(1, cols.pop(cols.index('Company Name')))
+final_df = final_df[cols]
+
+# 4. Save to CSV
+final_df.to_csv('screener_results.csv', index=False)
+print("Screener successfully completed and saved!")
